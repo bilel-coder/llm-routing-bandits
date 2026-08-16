@@ -1,0 +1,28 @@
+dataset:
+  name: LLMRouterBench
+  hf_repo: NPULH/LLMRouterBench
+  raw_archive: data/raw/bench-release.tar.gz
+  raw_dir: data/raw/bench
+  processed_dir: data/processed
+  interim_dir: data/interim
+
+  # Canonical column names (mapped from raw schema after audit)
+  canonical_columns:
+    - query_id
+    - dataset
+    - prompt
+    - model
+    - quality
+    - cost
+    - prompt_tokens
+    - completion_tokens
+
+  # Quality score expected range
+  quality_min: 0.0
+  quality_max: 1.0
+
+  # Cost expected range (raw tokens-based cost in USD or normalized)
+  cost_min: 0.0
+
+  # Minimum model coverage: fraction of queries a model must cover to be included
+  min_model_coverage: 0.5

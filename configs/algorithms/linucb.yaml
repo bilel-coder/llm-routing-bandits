@@ -1,0 +1,5 @@
+name: LinUCB
+class: llm_router.routers.linucb.LinUCBRouter
+hyperparameters:
+  alpha: 1.0          # exploration coefficient — tune on validation only
+  context_dim: 64     # set after PCA is fitted

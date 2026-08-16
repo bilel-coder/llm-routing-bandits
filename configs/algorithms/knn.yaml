@@ -1,0 +1,5 @@
+name: kNN-Router
+class: llm_router.routers.knn.KNNRouter
+hyperparameters:
+  k: 10              # number of neighbours — tune on validation only
+  metric: cosine

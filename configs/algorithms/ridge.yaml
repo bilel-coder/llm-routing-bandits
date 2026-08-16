@@ -1,0 +1,4 @@
+name: Ridge-Router
+class: llm_router.routers.ridge.RidgeRouter
+hyperparameters:
+  alpha: 1.0         # Ridge regularisation — tune on validation only

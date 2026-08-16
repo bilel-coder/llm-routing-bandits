@@ -1,0 +1,44 @@
+experiment:
+  # Random seeds for repeated experiments
+  seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+  # Cost-quality trade-off values to sweep
+  lambda_grid: [0.0, 0.1, 0.25, 0.5, 1.0]
+
+  # Data split ratios (must sum to 1.0)
+  splits:
+    train: 0.6
+    validation: 0.2
+    test: 0.2
+
+  # Split strategy: 'random' or 'dataset_stratified'
+  split_strategy: dataset_stratified
+
+  # Fix the split indices before any experiment (no test peeking)
+  freeze_splits: true
+
+  # Environment / shift scenarios
+  scenarios:
+    - id: S0
+      name: stationary
+      description: "Stable prompt distribution, stable reward mapping"
+
+    - id: S1
+      name: covariate_shift_abrupt
+      description: "Abrupt change in P(x); P(r|x,a) approximately stable"
+      shift_fraction: 0.5   # fraction of stream before shift
+
+    - id: S2
+      name: covariate_shift_gradual
+      description: "Gradual transition in P(x); implement after S1"
+      transition_fraction: 0.3
+
+    - id: S3
+      name: cost_drift
+      description: "P(r|x,a) changes via cost multiplier at change point"
+      shift_fraction: 0.5
+      cost_multiplier: 2.0  # example: cost doubles after shift
+
+  # Evaluation
+  bootstrap_n_resamples: 2000
+  bootstrap_ci: 0.95

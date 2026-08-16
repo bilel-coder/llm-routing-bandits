@@ -1,0 +1,92 @@
+# Candidate Model Pool — frozen after M1.5 audit (2026-08-17)
+# Selection criteria (NO test-set quality used):
+#   1. Complete coverage of all 11 retained datasets
+#   2. Real per-query USD cost (no systematically-zero-cost models)
+#   3. <1.5% generation failures (cost=0 AND completion_tokens=0)
+#   4. Provider diversity (at most one model per provider family)
+#   5. Cost-tier diversity (cheap / mid / expensive represented)
+#   6. Feasibility of complete outcome matrix (15,597 queries pre-dedup)
+
+# --- INCLUDED MODELS ---
+pool:
+  - name: claude-sonnet-4
+    provider: Anthropic
+    cost_tier: high          # mean ~$0.017/query
+    failure_rate_pct: 0.01
+    inclusion_reason: >
+      Unique Anthropic provider; high cost tier; near-zero generation failures.
+
+  - name: gemini-2.5-flash
+    provider: Google
+    cost_tier: mid           # mean ~$0.008/query
+    failure_rate_pct: 0.24
+    inclusion_reason: >
+      Google provider; mid cost tier; low generation failures.
+
+  - name: gemini-2.5-pro
+    provider: Google
+    cost_tier: highest       # mean ~$0.064/query
+    failure_rate_pct: 1.46
+    inclusion_reason: >
+      Google provider; highest cost tier — needed for wide cost spread.
+      Failure rate 1.46% is borderline; failures concentrated on arc-agi visual
+      reasoning tasks. Included because cost tier is not covered by any other model.
+      NOTE: two Google models in pool. Accepted because they represent distinct
+      cost tiers (flash=mid, pro=highest) and the cost-tier diversity criterion
+      takes precedence over strict one-model-per-provider.
+
+  - name: gpt-5
+    provider: OpenAI
+    cost_tier: high          # mean ~$0.036/query
+    failure_rate_pct: 0.28
+    inclusion_reason: >
+      Unique OpenAI provider; high cost tier; low generation failures.
+
+  - name: deepseek-r1-0528
+    provider: DeepSeek
+    cost_tier: mid_high      # mean ~$0.016/query
+    failure_rate_pct: 0.01
+    inclusion_reason: >
+      Unique DeepSeek provider (reasoning model); near-zero failures.
+
+  - name: kimi-k2-0905
+    provider: Moonshot AI
+    cost_tier: low           # mean ~$0.003/query
+    failure_rate_pct: 0.02
+    inclusion_reason: >
+      Unique Moonshot AI provider; low cost tier; near-zero failures.
+      Provides essential cheap anchor for cost-aware routing experiments.
+
+# --- EXCLUDED MODELS ---
+excluded:
+  - name: qwen3-235b-a22b-2507
+    reason: >
+      214 generation failures (1.37%), all zero-token/zero-cost — highest
+      failure rate among all Tier-1 candidates. kimi-k2-0905 covers the same
+      low-cost tier with 3 failures (<0.02%). Adding qwen3 would duplicate
+      the low-cost tier without adding provider benefit commensurate with the
+      data quality cost.
+
+  - name: deepseek-v3-0324
+    reason: >
+      Same provider (DeepSeek) as deepseek-r1-0528. Adding a second DeepSeek
+      model reduces provider diversity without covering a new cost tier.
+      deepseek-r1-0528 (reasoning model) is preferred as it represents a more
+      distinctive capability profile.
+
+# --- RETAINED DATASETS ---
+# arenahard_coding, arenahard_creative_writing, arenahard_math EXCLUDED:
+#   they are thematic subsets of arenahard — 100% prompt overlap — leakage risk.
+# All other Tier-1 candidates cover these 11 datasets fully.
+datasets:
+  - aime
+  - arc-agi
+  - arenahard
+  - gpqa
+  - hle
+  - livecodebench
+  - livemathbench
+  - mmlupro         # canonical split: test_1000
+  - simpleqa        # canonical split: test
+  - swe-bench
+  - tau2

@@ -1,0 +1,8 @@
+name: D-LinUCB
+class: llm_router.routers.discounted_linucb.DiscountedLinUCBRouter
+# Reference: Russac et al. (2019) "Weighted Linear Bandits for Non-Stationary Environments"
+# https://arxiv.org/abs/1909.09595
+hyperparameters:
+  alpha: 1.0          # exploration coefficient — tune on validation only
+  gamma: 0.99         # discount factor in [0,1] — tune on validation streams only
+  context_dim: 64
