@@ -101,6 +101,46 @@ def bootstrap_ci(
 
 
 # ---------------------------------------------------------------------------
+# Oracle tie-aware routing shares
+# ---------------------------------------------------------------------------
+
+def oracle_tie_stats(
+    R: np.ndarray,
+    tol: float = 1e-9,
+) -> tuple[np.ndarray, float, np.ndarray]:
+    """
+    Compute tie-aware Oracle routing shares.
+
+    Under the naive `argmax(R, axis=1)` recipe, ties in R (very common when
+    Q is binary and λ is small) are broken by numpy's stable first-index
+    rule — so shares depend on the column ORDER of the model pool, not on
+    any semantically meaningful preference. This distorts share reporting
+    even though Oracle utility is unaffected (max is well-defined).
+
+    This function instead assigns FRACTIONAL credit: for each row where k
+    arms tie at the max reward, each tied arm receives 1/k of a vote.
+
+    Parameters
+    ----------
+    R    : (n, K) reward matrix (typically Q - λ·C_norm).
+    tol  : two arms are considered tied if |R_a - R_max| ≤ tol.
+
+    Returns
+    -------
+    shares         : (K,) fractional Oracle routing share per arm — sums to 1.
+    tie_rate       : fraction of rows with ≥ 2 tied arms at the max.
+    ties_per_row   : (n,) integer count of tied arms per row (1 = no tie).
+    """
+    max_r = R.max(axis=1, keepdims=True)
+    is_max = np.abs(R - max_r) <= tol
+    ties_per_row = is_max.sum(axis=1)
+    fractional = is_max / ties_per_row[:, None]  # (n, K), rows sum to 1
+    shares = fractional.sum(axis=0) / R.shape[0]
+    tie_rate = float((ties_per_row > 1).mean())
+    return shares, tie_rate, ties_per_row
+
+
+# ---------------------------------------------------------------------------
 # Macro / micro averaging
 # ---------------------------------------------------------------------------
 

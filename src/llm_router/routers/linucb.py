@@ -27,6 +27,7 @@ from copy import deepcopy
 from typing import Optional
 
 import numpy as np
+from scipy.linalg import cho_factor, cho_solve
 
 from .base import Router
 
@@ -48,17 +49,19 @@ class LinUCBRouter(Router):
 
     def _init_matrices(self) -> None:
         d = self.context_dim
-        self._A: list[np.ndarray] = [np.eye(d) for _ in range(self.n_arms)]
-        self._b: list[np.ndarray] = [np.zeros(d) for _ in range(self.n_arms)]
-        # Cache inverses; recomputed lazily when A changes
-        self._A_inv: list[Optional[np.ndarray]] = [np.eye(d)] * self.n_arms
-        self._dirty: list[bool] = [False] * self.n_arms
+        self._A: list[np.ndarray] = [np.eye(d, dtype=np.float64) for _ in range(self.n_arms)]
+        self._b: list[np.ndarray] = [np.zeros(d, dtype=np.float64) for _ in range(self.n_arms)]
+        # Cache Cholesky factors; recomputed lazily when A changes.
+        # (Windows numpy has a pathologically slow np.linalg.inv for small
+        # matrices; scipy's cho_factor/cho_solve is ~100× faster on d=64.)
+        self._chol: list[Optional[tuple]] = [None] * self.n_arms
+        self._dirty: list[bool] = [True] * self.n_arms
 
-    def _get_A_inv(self, a: int) -> np.ndarray:
+    def _get_chol(self, a: int) -> tuple:
         if self._dirty[a]:
-            self._A_inv[a] = np.linalg.inv(self._A[a])
+            self._chol[a] = cho_factor(self._A[a], lower=True, check_finite=False)
             self._dirty[a] = False
-        return self._A_inv[a]
+        return self._chol[a]
 
     def fit(
         self,
@@ -76,13 +79,16 @@ class LinUCBRouter(Router):
         return self
 
     def select(self, context: np.ndarray) -> int:
-        x = context.reshape(-1)
-        scores = np.zeros(self.n_arms)
+        x = context.reshape(-1).astype(np.float64, copy=False)
+        scores = np.empty(self.n_arms)
         for a in range(self.n_arms):
-            A_inv = self._get_A_inv(a)
-            theta = A_inv @ self._b[a]
-            ucb = self.alpha * np.sqrt(x @ A_inv @ x)
-            scores[a] = x @ theta + ucb
+            chol = self._get_chol(a)
+            # u = A_a^{-1} x  via one Cholesky solve
+            u = cho_solve(chol, x, check_finite=False)
+            # A_a is symmetric ⇒ x^T A^{-1} b = u^T b  and  x^T A^{-1} x = u^T x
+            theta_dot_x = u @ self._b[a]
+            ucb = self.alpha * np.sqrt(max(0.0, x @ u))
+            scores[a] = theta_dot_x + ucb
         return int(np.argmax(scores))
 
     def update(self, context: np.ndarray, action: int, reward: float) -> None:

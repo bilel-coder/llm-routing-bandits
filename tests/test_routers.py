@@ -181,13 +181,22 @@ def test_linucb_updates_only_selected_arm():
 
 
 # ---------------------------------------------------------------------------
-# Test: D-LinUCB updates only selected arm (Russac: per-observation, not per-step)
+# Test: D-LinUCB — Russac 2019 time-based discount
+#
+# Every round every arm is discounted (V ← γV + (1-γ)λI, Ṽ ← γ²Ṽ + (1-γ²)λI,
+# b ← γb). The selected arm additionally receives x x^T (V, Ṽ) and r·x (b).
+# Unselected arms with non-trivial history therefore DO change each round —
+# their prior mass fades toward the regularisation prior.
 # ---------------------------------------------------------------------------
 
-def test_discounted_linucb_updates_only_selected_arm():
-    router = DiscountedLinUCBRouter(N_ARMS, DIM, alpha=1.0, gamma=0.9)
+def test_discounted_linucb_first_update_from_prior_unselected_unchanged():
+    """
+    Because reg·I is a fixed point of V ← γV + (1-γ)λI, unselected arms
+    starting at the prior remain at the prior after one update. This is
+    the ONLY case where unselected-arm state is unchanged.
+    """
+    router = DiscountedLinUCBRouter(N_ARMS, DIM, alpha=1.0, gamma=0.9, reg_lambda=1.0)
     router.fit(X_train)
-
     V_before = [m.copy() for m in router._V]
 
     x = X_test[0]
@@ -199,28 +208,88 @@ def test_discounted_linucb_updates_only_selected_arm():
             assert not np.allclose(router._V[arm], V_before[arm]), \
                 f"Arm {arm} (selected) V should have changed"
         else:
+            # Prior is a fixed point of the discount recursion
             assert np.allclose(router._V[arm], V_before[arm]), \
-                f"Arm {arm} (NOT selected) V should be unchanged"
+                f"Arm {arm} (never selected, at prior) V should stay at reg·I"
 
 
-def test_discounted_linucb_v_tilde_updates_with_gamma_squared():
-    """V~ is discounted by γ², V by γ — check the ratio after one update."""
-    g = 0.9
+def test_discounted_linucb_unselected_arm_prior_history_decays():
+    """
+    Once an arm has non-trivial history, its state must decay every round
+    it is NOT selected. This is the core of Russac's time-based forgetting.
+    """
+    g   = 0.8
     reg = 1.0
     router = DiscountedLinUCBRouter(N_ARMS, DIM, alpha=1.0, gamma=g, reg_lambda=reg)
     router.fit(X_train)
 
-    x = X_test[0]
-    a = router.select(x)
-    router.update(x, a, 1.0)
+    # Manually give arm 0 some history: select it once with a fixed x.
+    x0 = X_test[0]
+    router.update(x0, action=0, reward=1.0)
+    V0_after_step1 = router._V[0].copy()
+    b0_after_step1 = router._b[0].copy()
 
-    # V_a  = γ  * reg*I + x x^T
-    # V~_a = γ² * reg*I + x x^T
-    # Difference = (γ - γ²) * reg * I = γ(1-γ) * reg * I
-    diff = router._V[a] - router._V_tilde[a]
-    expected_diff = (g - g * g) * reg * np.eye(DIM)
-    assert np.allclose(diff, expected_diff, atol=1e-10), \
-        "V - V~ should equal γ(1-γ)·reg·I after first update"
+    # Now select arm 1 for the next step — arm 0 must be discounted.
+    x1 = X_test[1]
+    router.update(x1, action=1, reward=0.5)
+
+    # Expected: V0 ← γ·V0 + (1-γ)·reg·I ;  b0 ← γ·b0
+    expected_V0 = g * V0_after_step1 + (1 - g) * reg * np.eye(DIM)
+    expected_b0 = g * b0_after_step1
+    np.testing.assert_allclose(router._V[0], expected_V0, atol=1e-10)
+    np.testing.assert_allclose(router._b[0], expected_b0, atol=1e-10)
+
+
+def test_discounted_linucb_matches_russac_closed_form_after_repeated_pulls():
+    """
+    Analytical closed form when the SAME arm is selected with the SAME x
+    for N consecutive rounds:
+        V(N)  = reg·I + (Σ_{k=0}^{N-1} γ^k)  · x x^T
+        Ṽ(N)  = reg·I + (Σ_{k=0}^{N-1} γ^{2k}) · x x^T
+    """
+    g   = 0.7
+    reg = 1.0
+    N   = 5
+    router = DiscountedLinUCBRouter(n_arms=2, context_dim=DIM,
+                                    alpha=1.0, gamma=g, reg_lambda=reg)
+    router.fit(X_train)
+    x = X_test[0]
+    for _ in range(N):
+        router.update(x, action=0, reward=1.0)
+
+    coef_V  = sum(g ** k     for k in range(N))
+    coef_Vt = sum(g ** (2*k) for k in range(N))
+    expected_V  = reg * np.eye(DIM) + coef_V  * np.outer(x, x)
+    expected_Vt = reg * np.eye(DIM) + coef_Vt * np.outer(x, x)
+    np.testing.assert_allclose(router._V[0],       expected_V,  atol=1e-9)
+    np.testing.assert_allclose(router._V_tilde[0], expected_Vt, atol=1e-9)
+
+
+def test_discounted_linucb_v_and_vtilde_diverge_over_time():
+    """After multiple observations V and V~ must differ (except when γ=1)."""
+    g   = 0.8
+    reg = 1.0
+    router = DiscountedLinUCBRouter(n_arms=2, context_dim=DIM,
+                                    alpha=1.0, gamma=g, reg_lambda=reg)
+    router.fit(X_train)
+    x = X_test[0]
+    for _ in range(4):
+        router.update(x, action=0, reward=1.0)
+    assert not np.allclose(router._V[0], router._V_tilde[0]), \
+        "V and V~ must diverge when γ<1 after ≥2 selections of same arm"
+
+
+def test_discounted_linucb_gamma1_keeps_v_equal_vtilde():
+    """Reduction property: γ=1 ⇒ V ≡ V~ at every step."""
+    router = DiscountedLinUCBRouter(N_ARMS, DIM, alpha=1.0, gamma=1.0)
+    router.fit(X_train)
+    for t in range(10):
+        x = X_test[t % N_TEST]
+        a = router.select(x)
+        router.update(x, a, float(R_test[t % N_TEST, a]))
+        for arm in range(N_ARMS):
+            np.testing.assert_allclose(router._V[arm], router._V_tilde[arm],
+                                        atol=1e-10)
 
 
 # ---------------------------------------------------------------------------

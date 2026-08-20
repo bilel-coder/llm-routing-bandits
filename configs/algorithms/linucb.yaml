@@ -1,5 +1,36 @@
-name: LinUCB
-class: llm_router.routers.linucb.LinUCBRouter
+router: LinUCB
 hyperparameters:
-  alpha: 1.0          # exploration coefficient — tune on validation only
-  context_dim: 64     # set after PCA is fitted
+  alpha: 0.5
+selection:
+  criterion: mean macro_utility across (scenario, lambda) DEV conditions
+  n_seeds: 10
+  grand_macro: 0.52772
+  ci_lo: 0.52173
+  ci_hi: 0.5352
+  std_seed: 0.01132
+  post_shift_regret_mean: 0.27991
+  frozen_partition: DEV
+  final_test_touched: false
+  protocol:
+    stage1_seeds:
+    - 42
+    - 43
+    - 44
+    - 45
+    - 46
+    stage2_seeds:
+    - 47
+    - 48
+    - 49
+    - 50
+    - 51
+    scenarios:
+    - S0
+    - S1
+    - S3
+    lambdas:
+    - 0.0
+    - 0.1
+    - 0.25
+    - 0.5
+    - 1.0

@@ -1,4 +1,36 @@
-name: Ridge-Router
-class: llm_router.routers.ridge.RidgeRouter
+router: Ridge
 hyperparameters:
-  alpha: 1.0         # Ridge regularisation — tune on validation only
+  alpha: 10.0
+selection:
+  criterion: mean macro_utility across (scenario, lambda) DEV conditions
+  n_seeds: 10
+  grand_macro: 0.57282
+  ci_lo: 0.57058
+  ci_hi: 0.5749
+  std_seed: 0.00362
+  post_shift_regret_mean: 0.21413
+  frozen_partition: DEV
+  final_test_touched: false
+  protocol:
+    stage1_seeds:
+    - 42
+    - 43
+    - 44
+    - 45
+    - 46
+    stage2_seeds:
+    - 47
+    - 48
+    - 49
+    - 50
+    - 51
+    scenarios:
+    - S0
+    - S1
+    - S3
+    lambdas:
+    - 0.0
+    - 0.1
+    - 0.25
+    - 0.5
+    - 1.0
